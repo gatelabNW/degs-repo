@@ -1,0 +1,12 @@
+# The following environmental variables are configured for the rosmap project on Quest.  
+# If running this project on a local machine or some other environment, update paths accordingly.  
+# Folders will be auto-generated if they do not exist.
+
+dirs.project_root=/projects/b1169/projects/rosmap-project
+dirs.b1042_project_root=/projects/b1042/Gate_Lab/projects/rosmap-project
+dirs.junk_drawer=/projects/b1169/projects/rosmap-project/junk-drawer
+dirs.objects=/projects/b1042/Gate_Lab/projects/rosmap-project/objects
+
+isAnalyticsNode=false # set to true ONLY if running R on an analytics node.
+# creds.synapse.api_key={Optional, but needed for synapse downloads}
+# GITHUB_PAT={Optional. Github personal access token}
