@@ -1,0 +1,6 @@
+dirs$scripts <- "{dirs$repo_root}/scripts" |> glue() |> mkdirs()
+dirs$documents <- "{dirs$project_root}/documents" |> glue() |> mkdirs()
+dirs$resources <- "{dirs$project_root}/resources" |> glue() |> mkdirs()
+dirs$metadata <- "{dirs$resources}/metadata" |> glue() |> mkdirs()
+dirs$reference <- "{dirs$resources}/reference" |> glue() |> mkdirs()
+dirs$seurat <- "{dirs$objects}/seurat" |> glue() |> mkdirs()

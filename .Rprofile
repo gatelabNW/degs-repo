@@ -13,15 +13,15 @@ source("renv/activate.R")
 # options(repos = c("http://ran.synapse.org", "http://cran.fhcrc.org"))
 #
 if (!file.exists('.Renviron')) {stop("Cannot initialize project.  No .Renviron file present. Please see README.md for instructions.")}
-# 
-# tryCatch(
-#   {
-#     source('r/config/init.R')
-#   },
-#   error=function(e) {
-#     message('An error occurred during initialization')
-#     print(e)
-#   }
-# )
-# 
-# 
+
+tryCatch(
+  {
+    source('scripts/config/init.R')
+  },
+  error=function(e) {
+    message('An error occurred during initialization')
+    print(e)
+  }
+)
+
+
