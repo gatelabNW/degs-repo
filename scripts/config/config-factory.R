@@ -17,7 +17,7 @@ rds_loader <- function(file) {
       start_time <-  now(tzone = "US/Central")
       "Loading file at {file}" |> glue() |> message()
       object <- readRDS(file)
-      delta_time <- (now(tzone = "US/Central") - start_time) %>% as.duration %>% as.character
+      delta_time <- (now(tzone = "US/Central") - start_time) |> as.duration() |> as.character()
       "Success! Time elapsed: {delta_time}" |> glue() |> message()
       object
       },
@@ -36,14 +36,14 @@ rds.gz_loader <- function(file) {
     load = function() {
       start_time <-  now(tzone = "US/Central")
       "Loading file at {file}" |> glue() |> message()
-      object <- ktools::readRDS.gz(file)
-      delta_time <- (now(tzone = "US/Central") - start_time) %>% as.duration %>% as.character
+      object <- readRDS.gz(file)
+      delta_time <- (now(tzone = "US/Central") - start_time) |> as.duration() |> as.character()
       "Success! Time elapsed: {delta_time}" |> glue() |> message()
       object
       },
     save = function(obj) {
       "Saving file at {file}" |> glue() |> message()
-      ktools::saveRDS.gz(obj, file = file, compression_level = 9, threads = 24)
+      saveRDS.gz(obj, file = file, compression_level = 9, threads = 24)
       message("success")
     }
   )
@@ -82,7 +82,7 @@ h5Seurat_loader <- function(file) {
 #       start_time <-  now(tzone = "US/Central")
 #       "Loading file at {file}" |> glue() |> message()
 #       ktools::readRDS.gz(file) |> add_metadata()
-#       delta_time <- (now(tzone = "US/Central") - start_time) %>% as.duration %>% as.character
+#       delta_time <- (now(tzone = "US/Central") - start_time) |> as.duration() |> as.character()
 #       "Success! Time elapsed: {delta_time}" |> glue() |> message()
 #       "Loading file at {file}" |> glue() |> message()
 #

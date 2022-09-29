@@ -1,9 +1,10 @@
 #!/bin/bash
-#SBATCH --account b1042
-#SBATCH --partition genomics
+#SBATCH --account p31535
+#SBATCH --partition genhimem
 #SBATCH --job-name generate-degs
 #SBATCH --nodes 1
-#SBATCH --mem 180G
+#SBATCH --nodelist qhimem0206
+#SBATCH --mem 1500G
 #SBATCH --ntasks-per-node 52
 #SBATCH --time 48:00:00
 #SBATCH --output /projects/b1169/projects/rosmap-project/documents/logs/%x.oe%j.log
@@ -20,5 +21,4 @@ module load pigz/2.4
 module load curl/7.73.0
 module load hdf5/1.8.19-serial
 module load geos/3.8.1
-
-Rscript scripts/rosmap-project/main.R
+Rscript scripts/rosmap-project/main-2.R

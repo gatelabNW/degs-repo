@@ -5,31 +5,7 @@ library(parallel)
 library(pbmcapply)
 library(rjson)
 
-# generate_degs <- function(seurat, degs_root, compare_by, group_by = NULL, comparisons = NULL, covariates = NULL, cores = 1) {
-#   "\ngenerating DEGs \ncompare_by: {compare_by} \ngroup_by: {group_by} \ncomparisons: {comparisons} \ncovariates: {covariates} \nfolder: {degs_root}" |> glue() |> message()
-#   if (group_by |> is.null()) {
-#     seurat@meta.data$all <- 'all'
-#     group_by <- 'all'
-#   }
-#   comparison_set <- generate_comparison_set(seurat, compare_by, group_by, comparisons)
-#   seurat@meta.data$temp <- create_temp_column(seurat, group_by, compare_by)
-#   Idents(seurat) <- 'temp'
-#   # comparison_set |> seq_along() |> mclapply(mc.cores = cores, \(i){
-#   comparison_set |> seq_along() |> lapply(\(i){
-#     'Processing comparison {i} of {comparison_set |> length()}' |> glue() |> message()
-#     comparison <- comparison_set[[i]]
-#     # comparison_set |> lapply(\(comparison){
-#     compare_groups(
-#       seurat = seurat,
-#       comparison = comparison,
-#       degs_path = "{degs_root}/degs" |> glue() |> mkdirs(),
-#       metadata_path = "{degs_root}/deg-metadata" |> glue() |> mkdirs(),
-#       covariates = covariates
-#     )
-#   })
-# }
-
-generate_degs_2 <- function(seurat, deg_specs_list, cores = 1) {
+generate_degs <- function(seurat, deg_specs_list, cores = 1) {
   # deg_specs_list |> seq_along() |> lapply(\(i) {
   deg_specs_list[[1]] |> seq_along() |> mclapply(mc.cores = cores, \(i) {
     if (deg_specs_list$group_by[[i]] |> is.null()  || deg_specs_list$group_by[[i]] == 'all') {
@@ -164,6 +140,7 @@ find_degs <- function(seurat, group_1, group_2, logfc.threshold = -Inf, save_pat
   "Finding DEGs for {group_1} vs. {group_2}" |> glue() |> message()
   # TODO: Find out why multiple covariates are causing "error in evaluating the argument 'args' in selecting a method for function 'do.call': (subscript) logical subscript too long"
   # Disabling covariates until this is resolved
+  # temporarily re-enabled
   
   
   # final_covariates <- covariates |> lapply(\(covariate) {
@@ -181,7 +158,7 @@ find_degs <- function(seurat, group_1, group_2, logfc.threshold = -Inf, save_pat
     # min.cells.group = 1,
     # min.cells.feature = 1,
     assay = "RNA",
-    # latent.vars = covariates,
+    latent.vars = covariates,
     verbose = TRUE
   )
   degs$BH <- p.adjust(degs$p_val, method = "BH")
