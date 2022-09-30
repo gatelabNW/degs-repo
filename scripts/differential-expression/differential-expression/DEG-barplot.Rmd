@@ -1,0 +1,152 @@
+```{r}
+library(glue)
+library(ggplot2)
+library(tidyr)
+library(stringr)
+library(extrafont)
+library(dplyr)
+```
+
+```{r}
+root<-"/projects/p31535/als-project/documents/differential-expression/latest/l2/degs"
+seurat_path<-"/projects/p31535/als-project/resources/seurat-object/seurat-latest.rds"
+seurat_integrated<-readRDS(seurat_path)
+color_file<-"/projects/p31535/zzhang/als/repo/als-repo/resources/metadata/cluster-metadata.csv"
+color_df<-read.csv(color_file)
+degs_path<-paste(root,list.files(root),sep="/")
+```
+
+```{r}
+find_all_cell_types<-function(degs_path){
+  cell_types<-c()
+  for(cur_deg in degs_path){
+    x<-tail(unlist(strsplit(cur_deg,"/")),n=1)|>
+      strsplit("_vs._")|>
+      unlist()
+    # split by _vs._ to cell_type+group1 and group2
+    pt1<-x[1]
+    pt2<-x[2]%>%str_remove(".csv")
+    pt1<-unlist(strsplit(pt1,"__"))
+    # no cell types, skip for now
+    if(length(pt1)==1){
+      next
+    }
+    cell_types<-c(cell_types,pt1[1])
+  }
+  unique(cell_types)
+}
+
+filter_degs <- function(degs, bh_threshold = Inf, logfc_threshold = 0, excluded_patterns = NULL) {
+  degs_filtered <- degs[degs$BH <= bh_threshold,]
+  degs_filtered <- degs_filtered[abs(degs_filtered$avg_log2FC) >= logfc_threshold,]
+  if(!is.null(excluded_patterns)){ degs_filtered <- degs_filtered|>filter(!grepl(paste(excluded_patterns,collapse="|"), degs_filtered$X)) }
+  degs_filtered
+}
+```
+
+
+```{r}
+celltype2color<-color_df$color
+names(celltype2color)<-color_df$predicted.celltype.l2
+```
+
+
+```{r}
+# barplot of DEGs for a comparison group, not unique degs
+# all distinct degs in one graph
+
+'%!in%' <- function(x,y)!('%in%'(x,y))
+
+# condition<-"als_vs.*healthy_control|healthy_control.*als_vs"
+# condition<-"als_c9orf72_vs.*healthy_control|healthy_control.*als_c9orf72_vs"
+condition<-"als_fast_vs.*als_slow|als_slow.*als_fast_vs"
+condition_title<-strsplit(condition,"|",fixed = T)[[1]][1]%>%str_remove("\\*")
+target_files<-degs_path[grepl(condition,degs_path)]
+
+
+cell_types<-find_all_cell_types(degs_path)
+num_distinct_deg<-c()
+deg_threshold<-1e-3
+fc_threshold<-0.25
+gene_sets<-list()
+cell_num_threshold<-0.01 # 1% of total cells
+cells_cutoff<-ceiling(dim(seurat_integrated)[2]*cell_num_threshold)
+pdf(glue("/projects/p31535/zzhang/als/output/deg_barplots/{condition_title}_fc.{fc_threshold}_deg_barplot_by_cell_type.pdf"),width = 6, height = 8)
+
+cell_type_pass_threshold<-c()
+
+for(cur_file in target_files){
+  x<-tail(unlist(strsplit(cur_file,"/")),n=1)%>%
+      strsplit("_vs._")%>%
+      unlist()
+  if(!grepl("__", cur_file, fixed = TRUE)){
+    next
+  }
+  cur_cell_type<-unlist(strsplit(x[1],"__"))[1]
+  ## check if meets threshold of cells
+  # 
+  # if(sum(seurat_integrated$cell_type==str_replace_all(cur_cell_type,"_"," "))<cells_cutoff){
+  #   print(cur_cell_type)
+  #   next
+  # }
+  df<-read.csv(cur_file)|>
+     filter_degs(bh_threshold = deg_threshold, logfc_threshold = fc_threshold)
+    # filter_degs(bh_threshold = deg_threshold, logfc_threshold = fc_threshold, excluded_patterns = c("^RP", "^XIST$"))
+  
+  num_distinct_deg<-c(num_distinct_deg,nrow(df))
+  cell_type_pass_threshold<-c(cell_type_pass_threshold,str_replace_all(cur_cell_type,"_"," "))
+}
+
+
+count_df<-data.frame(cell_type=cell_type_pass_threshold,
+               n_degs=num_distinct_deg)
+count_df<-count_df[count_df$n_degs>0,]
+count_df<-count_df[order(count_df$n_degs, decreasing = T),]
+count_df["col"]<-sapply(count_df$cell_type, function(x){celltype2color[x]})
+new_cols<-count_df$col
+names(new_cols)<-count_df$cell_type
+plt<-ggplot(data=count_df, aes(x=reorder(cell_type,-n_degs), y=n_degs, fill=cell_type)) +
+  geom_bar(stat="identity", width = 0.8)+
+  scale_fill_manual(" ", values = new_cols)+
+  scale_y_continuous(expand = c(0,0),breaks = seq(0, max(count_df$n_degs)+5, by = 5),
+                     limits = c(0,max(count_df$n_degs)+5))+
+  guides(fill = guide_legend(ncol=1))+
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        # aspect.ratio = 1.5,
+        text=element_text(size=12),
+        axis.line.y = element_line(color="black", size = 0.5),
+        axis.line.x = element_line(color="black", size = 0.5),
+        )+ 
+  labs(x = "",y = "Number of DEGs")+
+  ggtitle(str_replace_all(condition_title,"_"," "))
+
+print(plt)
+
+dev.off()
+
+out_png_file<-glue("/projects/p31535/zzhang/als/output/deg_barplots/{condition_title}_fc.{fc_threshold}_deg_barplot_by_cell_type.png")
+ggsave(out_png_file,
+       plot=plt,
+       device = "png",
+       width = 6,
+       height = 8,
+       dpi=300)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+

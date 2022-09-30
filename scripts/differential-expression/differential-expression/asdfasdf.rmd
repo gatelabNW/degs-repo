@@ -1,0 +1,177 @@
+Skip to content
+Search or jump to…
+Pull requests
+Issues
+Marketplace
+Explore
+ 
+@ahreed304 
+gatelabNW
+/
+als
+Private
+Code
+Issues
+1
+Pull requests
+Actions
+Projects
+Security
+Insights
+Settings
+als/scripts/upset_plots/barplot.Rmd
+@chuckzzzz
+chuckzzzz Upset plot script
+Latest commit 98b4d0c 6 days ago
+ History
+ 1 contributor
+175 lines (135 sloc)  4.76 KB
+   
+```{r}
+library(glue)
+library(ggplot2)
+library(tidyr)
+library(stringr)
+```
+
+```{r}
+root<-"/projects/p31535/als-project/documents/differential-expression/degs"
+degs_path<-paste(root,list.files(root),sep="/")
+```
+
+```{r}
+find_all_cell_types<-function(degs_path){
+  cell_types<-c()
+  for(cur_deg in degs_path){
+    x<-tail(unlist(strsplit(cur_deg,"/")),n=1)%>%
+      strsplit("_vs._")%>%
+      unlist()
+    # split by _vs._ to cell_type+group1 and group2
+    pt1<-x[1]
+    pt2<-x[2]%>%str_remove(".csv")
+    pt1<-unlist(strsplit(pt1,"__"))
+    # no cell types, skip for now
+    if(length(pt1)==1){
+      next
+    }
+    cell_types<-c(cell_types,pt1[1])
+  }
+  unique(cell_types)
+}
+```
+
+
+```{r}
+pdf("/projects/p31535/zzhang/als/output/distinct_deg_bar_plot/distinct_deg_barplot_by_diagnosis.pdf",width = 16, height = 9)
+deg_threshold<-0.05
+cell_types<-find_all_cell_types(degs_path)
+for(cur_cell_type in cell_types){
+  cur_files<-degs_path[grepl(cur_cell_type,degs_path)]
+  
+  gene_set_list<-list()
+  for(cur_file in cur_files){
+    # print(cur_file)
+    x<-tail(unlist(strsplit(cur_file,"/")),n=1)%>%
+      strsplit("_vs._")%>%
+      unlist()
+    group1<-unlist(strsplit(x[1],"__"))[2]
+    group2<-x[2]%>%str_remove(".csv")
+    cur_gene_set_name<-paste(group1,group2,sep = " vs. ")
+    df<-read.csv(cur_file)
+    df<-df[df["BH"]<deg_threshold,]
+    gene_set_list[[cur_gene_set_name]]<-df[["X"]]
+  }
+  
+  # calculate num deg unique to comparison
+  comp_group<-c()
+  num_distinct_deg<-c()
+  
+  for(cur_comp in names(gene_set_list)){
+    cur_others<-unlist(gene_set_list[!cur_comp==names(gene_set_list)])
+    cur<-gene_set_list[[cur_comp]]
+    cur_distinct_deg<-length(setdiff(cur,cur_others))
+    comp_group<-c(comp_group,cur_comp)
+    num_distinct_deg<-c(num_distinct_deg,cur_distinct_deg)
+  }
+  
+  
+  df<-data.frame(comparison_id=comp_group,
+                 n_degs=num_distinct_deg)
+  plt<-ggplot(data=df, aes(x=comparison_id, y=n_degs)) +
+    geom_bar(stat="identity", fill="steelblue")+
+    geom_text(aes(label=n_degs), vjust=-0.3, size=3.5)+
+    theme_minimal()+
+    ggtitle(cur_cell_type) 
+  print(plt)
+}
+dev.off()
+```
+
+
+```{r}
+# all distinct degs in one graph
+pdf("/projects/p31535/zzhang/als/output/distinct_deg_bar_plot/distinct_deg_barplot_by_cell_type.pdf",width = 16, height = 16)
+target_group<-"als_c9orf72 vs. healthy_control"
+cell_types<-find_all_cell_types(degs_path)
+num_distinct_deg<-c()
+deg_threshold<-0.05
+for(cur_cell_type in cell_types){
+  cur_files<-degs_path[grepl(cur_cell_type,degs_path)]
+  gene_set_list<-list()
+  for(cur_file in cur_files){
+    # print(cur_file)
+    x<-tail(unlist(strsplit(cur_file,"/")),n=1)%>%
+      strsplit("_vs._")%>%
+      unlist()
+    group1<-unlist(strsplit(x[1],"__"))[2]
+    group2<-x[2]%>%str_remove(".csv")
+    cur_gene_set_name<-paste(group1,group2,sep = " vs. ")
+    df<-read.csv(cur_file)
+    df<-df[df["BH"]<deg_threshold,]
+    gene_set_list[[cur_gene_set_name]]<-df[["X"]]
+  }
+  
+  # calculate num deg unique to comparison
+  
+  cur_others<-unlist(gene_set_list[!target_group==names(gene_set_list)])
+  cur<-gene_set_list[[target_group]]
+  cur_distinct_deg<-length(setdiff(cur,cur_others))
+  num_distinct_deg<-c(num_distinct_deg,cur_distinct_deg)
+}
+df<-data.frame(cell_type=str_replace_all(cell_types,"_"," "),
+               n_degs=num_distinct_deg)
+plt<-ggplot(data=df, aes(x=reorder(cell_type,-n_degs), y=n_degs,fill=cell_type)) +
+  geom_bar(stat="identity")+
+  geom_text(aes(label=n_degs), vjust=-0.3, size=3.5)+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 30, vjust = 0.5, hjust=1))+
+  # theme(axis.text.x=element_blank(),
+  #       axis.title.x=element_blank())+
+  scale_fill_manual(" ", values = c(
+                    "Erythrocytes"="#556b2f",
+                    "HSPCs"="#483d8b",
+                    "Proliferating T Cells"="#3cb371",
+                    "mDCs"="#008b8b",
+                    "pDCs"="#9acd32",
+                    "Megakaryocytes"="#00008b",
+                    "Plasma B Cells"="#ff4500",
+                    "CD56hi NK Cells"="#ffa500",
+                    "CD16 Monocytes"="#ffff00",
+                    "Regulatory T Cells"="#c71585",
+                    "Gamma Delta T Cells"="#7cfc00",
+                    "NK/T Cells"="#00ff7f",
+                    "Naive CD8 T Cells"="#dc143c",
+                    "CD14 Monocytes"="#00ffff",
+                    "Memory B Cells"="#00bfff",
+                    "Naive B Cells"="#8b4513",
+                    "Memory CD8 T Cells"="#ff00ff",
+                    "Memory CD4 T Cells"="#1e90ff",
+                    "CD14 CD68hi Monocytes"="#d3d3d3", 
+                    "CD16hi NK Cells"="#ffa07a",
+                    "MAIT Cells"="#f0e68c",
+                    "Naive CD4 T Cells"="#0000ff")
+                )+
+  guides(color = guide_legend(override.aes = list(size=4), ncol=1) )
+print(plt)
+dev.off()
+```

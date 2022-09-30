@@ -1,0 +1,537 @@
+
+```{r}
+source("../lib/plot/ggplot_formatting.R")
+volcano_plot <- function(data, file = NULL, title = NULL, subtitle = NULL,
+  padj.lim = NULL, lfc.lim = NULL, padj.thresh = 0.01, lfc.threshold = 0.585,
+  width=unit(4, "inch"), height=unit(4, "inch"), scale_dot_size = TRUE, 
+  regex_label_filter=NULL, BH_label_filter=NULL, add_text=T
+) {
+
+  data$y_axis <- -log10(data$BH)
+  # Generate PFC scores
+  # data$PFC <- -log10(data$BH) * abs(data$avg_log2FC)
+  data$color <- "grey40"
+
+  if (is.null(padj.lim)) {
+    padj.lim <- data[data$y_axis != Inf, ]$y_axis |> max()
+  }
+  max_y <- padj.lim
+  overflow_y <- FALSE
+  if (dim(data[data$y_axis > padj.lim, ])[1] > 0) {
+    data[data$y_axis >= padj.lim, ]$color <- "purple"
+    data[data$y_axis > padj.lim, ]$y_axis <- padj.lim * 1.05
+    max_y <- max_y  * 1.05
+    overflow_y <- TRUE
+  }
+  data$PFC <- data$y_axis * abs(data$avg_log2FC)
+
+  data[which(data$BH <= padj.thresh & data$avg_log2FC > lfc.threshold), 'color'] <- "red"
+  data[which(data$BH <= padj.thresh & data$avg_log2FC < -lfc.threshold), 'color'] <- "blue"
+
+  if (is.null(lfc.lim)) {
+    lfc.lim <- max(abs(data$avg_log2FC))
+    if (lfc.lim < 1) {
+      lfc.lim <- 1
+    }
+  }
+
+  colors <- data$color |> unique()
+  names(colors) <- colors
+
+  p <- ggplot(
+    data,
+    aes(
+      x = avg_log2FC,
+      y = y_axis,
+      # y = -log10(BH),
+      # color = color,
+      label = gene,
+      # size = PFC,
+      # fill = color
+    )
+  )
+  if (scale_dot_size == TRUE) {
+    p <- p + aes(size = PFC)
+  }
+
+  if (overflow_y == TRUE) {
+    p <- p + geom_hline(
+      yintercept = padj.lim,
+      linetype = "solid",
+      color = "grey90"
+    )
+  }
+
+  p <- p + geom_hline(
+    yintercept = -log10(padj.thresh),
+    linetype = 2,
+    color = "gray"
+  )
+  p <- p + geom_vline(
+    xintercept = lfc.threshold,
+    linetype = 2,
+    color = "gray"
+  )
+  p <- p + geom_vline(
+    xintercept = -lfc.threshold,
+    linetype = 2,
+    color = "gray"
+  )
+  p <- p + geom_point(
+    aes(
+      # size = PFC,
+      color = color
+    ),
+    alpha = 0.6
+  )
+  p <- p + scale_color_manual(
+    values = colors,
+    aesthetics = c("color", "fill")
+  )
+  # scale_shape_manual(
+  #
+  # ) +
+  p <- p + theme_Publication_blank()
+  data_to_highlight<-data[which(data$color != 'grey40'), ]
+  if(!is.null(regex_label_filter)){
+    data_to_highlight_regex<-data_to_highlight[grepl("TR.V", data_to_highlight$gene),]
+  }
+  if(!is.null(BH_label_filter)){
+    data_to_highlight_BH<-data_to_highlight[data_to_highlight$BH<BH_label_filter,]
+  }
+  if(!is.null(BH_label_filter) && !is.null(regex_label_filter)){
+    data_to_highlight<-dplyr::union(data_to_highlight_regex, data_to_highlight_BH)
+  }else if(!is.null(BH_label_filter)){
+    data_to_highlight<-data_to_highlight_BH
+  }else if(!is.null(regex_label_filter)){
+    data_to_highlight<-data_to_highlight_regex
+  }
+  # data_to_highlight<-data_to_highlight[grepl("TR.V", data_to_highlight$gene) | data_to_highlight$BH<1e-15,]
+  if(add_text){
+    p <- p + geom_text_repel(
+    # data = data[which(data$color != 'grey40'), ],
+    data = data_to_highlight,
+    inherit.aes = T,
+    color = 'black',
+    size = 5,
+    force = 5,
+    max.overlaps = 15
+    )
+  }
+
+  p <- p + theme(legend.position = "none")
+  # theme(legend.margin=margin(1, 1, 1, 1, 'cm'))
+  p <- p + theme(axis.text.x = element_text(size = 12))
+  p <- p + theme(axis.text.y = element_text(size = 12))
+  p <- p + scale_x_continuous(limits = c(-lfc.lim, lfc.lim))
+  p <- p + scale_y_continuous(limits = c(0, max_y))
+  p <- p + labs(y = "-log10(BH)")
+
+    # if (!is.null(padj.lim)) {
+    #   p <- p + scale_y_continuous(limits = c(0, padj.lim))
+    # }
+  if (!is.null(title) && !is.na(title)) {
+    p <- p + labs(title = title)
+    p <- p + theme(plot.title = element_text(hjust = 0.5))
+  }
+  if (!is.null(subtitle) && !is.na(subtitle)) {
+    p <- p + labs(subtitle = subtitle)
+    p <- p + theme(plot.subtitle = element_text(hjust = 0.5))
+  }
+
+  if (!is.null(file)) {
+    print(glue("Savings volcano plot to {file}"))
+    set_panel_size(
+      p,
+      file = file,
+      width = width,
+      height = height
+    )
+  }
+
+  return(p)
+}
+
+```
+
+
+
+```{r fig.height=8, fig.width=6}
+CD4_CTL_deg_file<-"/projects/b1169/projects/als-project/documents/differential-expression/latest/l2/degs/CD4_CTL__als_vs._CD4_CTL__healthy_control.csv"
+# CD4_CTL_deg_file<-"/projects/p31535/zzhang/als/temp/CD4_CTL__als_vs._CD4_CTL__healthy_control.csv"
+data<-read.csv(CD4_CTL_deg_file)
+names(data)[names(data) == 'X'] <- 'gene'
+out_png_file<-"/projects/p31535/zzhang/als/output/deg_volcano/CD4_CTL_volcano.png"
+out_pdf_file<-"/projects/p31535/zzhang/als/output/deg_volcano/CD4_CTL_volcano.pdf"
+out_png_no_label_file<-"/projects/p31535/zzhang/als/output/deg_volcano/CD4_CTL_no_label_volcano.png"
+out_pdf_no_label_file<-"/projects/p31535/zzhang/als/output/deg_volcano/CD4_CTL_no_label_volcano.pdf"
+# plt<-volcano_plot(data, title="CD4 CTL als vs. CD4 CTL healthy control", padj.thresh = 0.001, lfc.threshold = 0.25, regex_label_filter = "TR.V", BH_label_filter = 1e-15)
+plt_no_text<-volcano_plot(data, title="CD4 CTL als vs. CD4 CTL healthy control", padj.thresh = 0.001, lfc.threshold = 0.25, add_text = F)
+plt<-volcano_plot(data, title="CD4 CTL als vs. CD4 CTL healthy control", padj.thresh = 0.001, lfc.threshold = 0.25)
+
+ggsave(out_png_file,
+       plot=plt,
+       device = "png",
+       width = 6,
+       height = 8,
+       dpi=300)
+
+
+pdf(out_pdf_file,
+           width = 6,
+           height = 8,
+           )
+
+plot(plt)
+dev.off()
+
+ggsave(out_png_no_label_file,
+       plot=plt_no_text,
+       device = "png",
+       width = 6,
+       height = 8,
+       dpi=300)
+
+
+pdf(out_pdf_no_label_file,
+           width = 6,
+           height = 8,
+           )
+
+plot(plt_no_text)
+dev.off()
+
+```
+```{r fig.height=8, fig.width=6}
+B_intermediate_deg_file<-"/projects/b1169/projects/als-project/documents/differential-expression/latest/l2/degs/B_intermediate__als_vs._B_intermediate__healthy_control.csv"
+data<-read.csv(B_intermediate_deg_file)
+names(data)[names(data) == 'X'] <- 'gene'
+out_png_file<-"/projects/p31535/zzhang/als/output/deg_volcano/B_intermediate_volcano.png"
+out_pdf_file<-"/projects/p31535/zzhang/als/output/deg_volcano/B_intermediate_volcano.pdf"
+out_png_no_label_file<-"/projects/p31535/zzhang/als/output/deg_volcano/B_intermediate_no_label_volcano.png"
+out_pdf_no_label_file<-"/projects/p31535/zzhang/als/output/deg_volcano/B_intermediate_no_label_volcano.pdf"
+
+plt<-volcano_plot(data, title="B intermediate als vs. B intermediate healthy control", padj.thresh = 0.001, lfc.threshold = 0.25)
+plt_no_text<-volcano_plot(data, title="B intermediate als vs. B intermediate healthy control", padj.thresh = 0.001, lfc.threshold = 0.25, add_text = F)
+
+
+ggsave(out_png_file,
+       plot=plt,
+       device = "png",
+       width = 6,
+       height = 8,
+       dpi=300)
+
+pdf(out_pdf_file,
+           width = 6,
+           height = 8,
+           )
+
+plot(plt)
+dev.off()
+
+
+ggsave(out_png_no_label_file,
+       plot=plt_no_text,
+       device = "png",
+       width = 6,
+       height = 8,
+       dpi=300)
+
+
+pdf(out_pdf_no_label_file,
+           width = 6,
+           height = 8,
+           )
+
+plot(plt_no_text)
+dev.off()
+```
+```{r fig.height=8, fig.width=6}
+gdT_deg_file<-"/projects/b1169/projects/als-project/documents/differential-expression/latest/l2/degs/gdT__als_fast_vs._gdT__als_slow.csv"
+data<-read.csv(gdT_deg_file)
+names(data)[names(data) == 'X'] <- 'gene'
+out_png_file<-"/projects/p31535/zzhang/als/output/deg_volcano/gdT_volcano.png"
+out_pdf_file<-"/projects/p31535/zzhang/als/output/deg_volcano/gdT_volcano.pdf"
+
+plt<-volcano_plot(data, title="gdT als fast vs. gdT als slow", padj.thresh = 0.001, lfc.threshold = 0.25, BH_label_filter = 1e-15)
+
+ggsave(out_png_file,
+       plot=plt,
+       device = "png",
+       width = 6,
+       height = 8,
+       dpi=300)
+
+
+pdf(out_pdf_file,
+           width = 6,
+           height = 8,
+           )
+
+plot(plt)
+dev.off()
+```
+
+```{r fig.height=8, fig.width=6}
+gdT_deg_file<-"/projects/b1169/projects/als-project/documents/differential-expression/latest/l2/degs/CD14_Mono__als_c9orf72_vs._CD14_Mono__healthy_control.csv"
+data<-read.csv(gdT_deg_file)
+names(data)[names(data) == 'X'] <- 'gene'
+out_png_file<-"/projects/p31535/zzhang/als/output/deg_volcano/cd14_volcano.png"
+out_pdf_file<-"/projects/p31535/zzhang/als/output/deg_volcano/cd14_volcano.pdf"
+
+plt<-volcano_plot(data, title="CD14 c9 vs. CD14 healthy control", padj.thresh = 0.001, lfc.threshold = 0.25, BH_label_filter = 1e-75)
+
+ggsave(out_png_file,
+       plot=plt,
+       device = "png",
+       width = 6,
+       height = 8,
+       dpi=300)
+
+
+pdf(out_pdf_file,
+           width = 6,
+           height = 8,
+           )
+
+plot(plt)
+dev.off()
+```
+
+```{r}
+gdT_deg_file<-"/projects/b1169/projects/als-project/documents/differential-expression/latest/l2/degs/CD4_CTL__als_fast_vs._CD4_CTL__als_slow.csv"
+data<-read.csv(gdT_deg_file)
+names(data)[names(data) == 'X'] <- 'gene'
+out_png_file<-"/projects/p31535/zzhang/als/output/deg_volcano/fast_vs._slow_CD4_CTL_volcano.png"
+out_pdf_file<-"/projects/p31535/zzhang/als/output/deg_volcano/fast_vs._slow_CD4_CTL_volcano.pdf"
+
+plt<-volcano_plot(data, title="CD4 CTL als fast vs. CD4 CTL als slow", padj.thresh = 0.001, lfc.threshold = 0.25, BH_label_filter = 1e-15)
+
+ggsave(out_png_file,
+       plot=plt,
+       device = "png",
+       width = 6,
+       height = 8,
+       dpi=300)
+
+
+pdf(out_pdf_file,
+           width = 6,
+           height = 8,
+           )
+
+plot(plt)
+dev.off()
+```
+```{r}
+gdT_deg_file<-"/projects/b1169/projects/als-project/documents/differential-expression/latest/l2/degs/CD4_Naive__als_fast_vs._CD4_Naive__als_slow.csv"
+data<-read.csv(gdT_deg_file)
+names(data)[names(data) == 'X'] <- 'gene'
+out_png_file<-"/projects/p31535/zzhang/als/output/deg_volcano/fast_vs._slow_CD4_naive_volcano.png"
+out_pdf_file<-"/projects/p31535/zzhang/als/output/deg_volcano/fast_vs._slow_CD4_naive_volcano.pdf"
+
+plt<-volcano_plot(data, title="CD4 Naive als fast vs. CD4 Naive als slow", padj.thresh = 0.001, lfc.threshold = 0.25, BH_label_filter = 1e-15)
+
+ggsave(out_png_file,
+       plot=plt,
+       device = "png",
+       width = 6,
+       height = 8,
+       dpi=300)
+
+
+pdf(out_pdf_file,
+           width = 6,
+           height = 8,
+           )
+
+plot(plt)
+dev.off()
+```
+
+```{r}
+gdT_deg_file<-"/projects/b1169/projects/als-project/documents/differential-expression/latest/l2/degs/CD8_TEM__als_c9orf72_vs._CD8_TEM__healthy_control.csv"
+data<-read.csv(gdT_deg_file)
+names(data)[names(data) == 'X'] <- 'gene'
+out_png_file<-"/projects/p31535/zzhang/als/output/deg_volcano/c9_vs._healthy_cd8_TEM_volcano.png"
+out_pdf_file<-"/projects/p31535/zzhang/als/output/deg_volcano/c9_vs._healthy_cd8_TEM_volcano.pdf"
+
+plt<-volcano_plot(data, title="CD8_TEM c9 vs. CD8_TEM healthy control", padj.thresh = 0.001, lfc.threshold = 0.25)
+
+ggsave(out_png_file,
+       plot=plt,
+       device = "png",
+       width = 6,
+       height = 8,
+       dpi=300)
+
+
+pdf(out_pdf_file,
+           width = 6,
+           height = 8,
+           )
+
+plot(plt)
+dev.off()
+```
+```{r}
+cur_deg_file<-"/projects/b1169/projects/als-project/documents/differential-expression/latest/l2/degs/CD14_Mono__als_vs._CD14_Mono__healthy_control.csv"
+data<-read.csv(cur_deg_file)
+names(data)[names(data) == 'X'] <- 'gene'
+out_png_file<-"/projects/p31535/zzhang/als/output/deg_volcano/als_vs._healthy_CD14_Mono_volcano.png"
+out_pdf_file<-"/projects/p31535/zzhang/als/output/deg_volcano/als_vs._healthy_CD14_Mono_volcano.pdf"
+
+plt<-volcano_plot(data, title="CD14 Mono als vs. CD14 Mono healthy control", padj.thresh = 0.001, lfc.threshold = 0.25)
+
+ggsave(out_png_file,
+       plot=plt,
+       device = "png",
+       width = 6,
+       height = 8,
+       dpi=300)
+
+
+pdf(out_pdf_file,
+           width = 6,
+           height = 8,
+           )
+
+plot(plt)
+dev.off()
+```
+
+```{r}
+cur_deg_file<-"/projects/b1169/projects/als-project/documents/differential-expression/latest/l2/degs/CD16_Mono__als_vs._CD16_Mono__healthy_control.csv"
+data<-read.csv(cur_deg_file)
+names(data)[names(data) == 'X'] <- 'gene'
+out_png_file<-"/projects/p31535/zzhang/als/output/deg_volcano/als_vs._healthy_CD16_Mono_volcano.png"
+out_pdf_file<-"/projects/p31535/zzhang/als/output/deg_volcano/als_vs._healthy_CD16_Mono_volcano.pdf"
+
+plt<-volcano_plot(data, title="CD16 Mono als vs. CD16 Mono healthy control", padj.thresh = 0.001, lfc.threshold = 0.25)
+
+ggsave(out_png_file,
+       plot=plt,
+       device = "png",
+       width = 6,
+       height = 8,
+       dpi=300)
+
+
+pdf(out_pdf_file,
+           width = 6,
+           height = 8,
+           )
+
+plot(plt)
+dev.off()
+```
+
+
+```{r}
+cur_deg_file<-"/projects/b1169/projects/als-project/documents/differential-expression/latest/l2/degs/Treg__als_vs._Treg__healthy_control.csv"
+data<-read.csv(cur_deg_file)
+names(data)[names(data) == 'X'] <- 'gene'
+out_png_file<-"/projects/p31535/zzhang/als/output/deg_volcano/als_vs._healthy_Treg_volcano.png"
+out_pdf_file<-"/projects/p31535/zzhang/als/output/deg_volcano/als_vs._healthy_Treg_volcano.pdf"
+
+plt<-volcano_plot(data, title="Treg als vs. Treg healthy control", padj.thresh = 0.001, lfc.threshold = 0.25)
+
+ggsave(out_png_file,
+       plot=plt,
+       device = "png",
+       width = 6,
+       height = 8,
+       dpi=300)
+
+
+pdf(out_pdf_file,
+           width = 6,
+           height = 8,
+           )
+
+plot(plt)
+dev.off()
+```
+
+
+```{r}
+cur_deg_file<-"/projects/b1169/projects/als-project/documents/differential-expression/latest/l2/degs/MAIT__als_vs._MAIT__healthy_control.csv"
+data<-read.csv(cur_deg_file)
+names(data)[names(data) == 'X'] <- 'gene'
+out_png_file<-"/projects/p31535/zzhang/als/output/deg_volcano/als_vs._healthy_MAIT_volcano.png"
+out_pdf_file<-"/projects/p31535/zzhang/als/output/deg_volcano/als_vs._healthy_MAIT_volcano.pdf"
+
+plt<-volcano_plot(data, title="MAIT als vs. MAIT healthy control", padj.thresh = 0.001, lfc.threshold = 0.25)
+
+ggsave(out_png_file,
+       plot=plt,
+       device = "png",
+       width = 6,
+       height = 8,
+       dpi=300)
+
+
+pdf(out_pdf_file,
+           width = 6,
+           height = 8,
+           )
+
+plot(plt)
+dev.off()
+```
+## old MAIT
+```{r}
+MAIT_als<-seurat_integrated@meta.data[seurat_integrated@meta.data$cell_type=="MAIT Cells" &
+                                           seurat_integrated@meta.data$diagnosis_general=="als",]|>rownames()
+MAIT_control<-seurat_integrated@meta.data[seurat_integrated@meta.data$cell_type=="MAIT Cells" &
+                                           seurat_integrated@meta.data$diagnosis_general=="healthy_control",]|>rownames()
+DefaultAssay(object = seurat_integrated) <- "RNA"
+
+degs<-FindMarkers(
+    object = seurat_integrated,
+    ident.1 = MAIT_als,
+    ident.2 = MAIT_control,
+    test.use = "MAST",
+    logfc.threshold = 0,
+    assay = "RNA"
+)
+
+degs$BH<-degs$p_val_adj
+degs<-tibble::rownames_to_column(degs, "gene")
+
+plt<-volcano_plot(degs, title="Old MAIT als vs. Old MAIT healthy control", padj.thresh = 0.001, lfc.threshold = 0.25)
+
+
+out_png_file<-"/projects/p31535/zzhang/als/output/deg_volcano/als_vs._healthy_Old_MAIT_volcano.png"
+out_pdf_file<-"/projects/p31535/zzhang/als/output/deg_volcano/als_vs._healthy_Old_MAIT_volcano.pdf"
+
+
+ggsave(out_png_file,
+       plot=plt,
+       device = "png",
+       width = 6,
+       height = 8,
+       dpi=300)
+
+
+pdf(out_pdf_file,
+           width = 6,
+           height = 8,
+           )
+
+plot(plt)
+dev.off()
+
+## old MAIT Cells marker
+old_MAIT_marker<-FindMarkers(seurat_integrated, ident.1 = "MAIT Cells", min.pct = 0.25)
+old_MAIT_marker[old_MAIT_marker$pct.1>0.5,]
+
+```
+
+
+
+
+
+
+

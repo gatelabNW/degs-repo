@@ -1,0 +1,10 @@
+"{dirs$scripts}/differential-expression/generate-volcano-plots.R" |> glue() |> source()
+output_root <- "{dirs$project_root}/documents/differential-expression/latest/l2" |> glue() |> mkdir()
+degs_path <- "{output_root}/degs" |> glue()
+volcanos_path <- "{output_root}/volcano-plots-2" |> glue() |> mkdir()
+
+# make_plots(degs_path, volcanos_path, 0.585)
+#   make_plots(degs_path, volcanos_path, 0.5)
+  generate_volcano_plots(degs_path, volcanos_path, lfc_threshold = 0.25, excluded_patterns = c('^RP'))
+  generate_volcano_plots(degs_path, volcanos_path, lfc_threshold = 0.5, excluded_patterns = c('^RP'))
+  generate_volcano_plots(degs_path, volcanos_path, lfc_threshold = 0.585, excluded_patterns = c('^RP'))

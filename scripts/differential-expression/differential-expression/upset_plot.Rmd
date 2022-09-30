@@ -1,0 +1,278 @@
+```{r}
+library(UpSetR)
+library(glue)
+library(tidyr)
+library(stringr)
+library(grid)
+
+```
+
+
+```{r}
+root<-"/projects/b1169/projects/als-project/documents/differential-expression/latest/l2/degs"
+degs_path<-paste(root,list.files(root),sep="/")
+color_file<-"/projects/p31535/zzhang/als/repo/als-repo/resources/metadata/cluster-metadata.csv"
+color_df<-read.csv(color_file)
+celltype2color<-color_df$color
+names(celltype2color)<-color_df$predicted.celltype.l2
+```
+
+```{r}
+# upset plot for each cluster by 4 diagnosis
+find_all_cell_types<-function(degs_path){
+  cell_types<-c()
+  for(cur_deg in degs_path){
+    x<-tail(unlist(strsplit(cur_deg,"/")),n=1)%>%
+      strsplit("_vs._")%>%
+      unlist()
+    # split by _vs._ to cell_type+group1 and group2
+    pt1<-x[1]
+    pt2<-x[2]%>%str_remove(".csv")
+    pt1<-unlist(strsplit(pt1,"__"))
+    # no cell types, skip for now
+    if(length(pt1)==1){
+      next
+    }
+    cell_types<-c(cell_types,pt1[1])
+  }
+  unique(cell_types)
+}
+theme_Publication_blank <- function(base_size=12, base_family="") {
+  (theme_foundation(base_size=base_size, base_family=base_family)
+   + theme(plot.title = element_text(size = rel(1.2), hjust = 0.5),
+           text = element_text(),
+           panel.background = element_rect(fill = "transparent",colour = NA),
+           plot.background = element_rect(fill = "transparent",colour = NA),
+           panel.border = element_rect(colour = NA, fill = "transparent"),
+           axis.title = element_text(size = rel(1)),
+           axis.title.y = element_text(angle=90,margin=margin(0,10,0,0)),
+           axis.title.x = element_text(margin=margin(10,0,0,0)),
+           axis.text = element_text(), 
+           axis.line = element_line(colour="black"),
+           axis.ticks = element_line(size = 0.3),
+           axis.line.x = element_line(size = 0.3, linetype = "solid", colour = "black"),
+           axis.line.y = element_line(size = 0.3, linetype = "solid", colour = "black"),
+           panel.grid.major = element_blank(),
+           panel.grid.minor = element_blank(),
+           legend.key = element_rect(colour = NA, fill="transparent"),
+           legend.position = "bottom",
+           # legend.position = "right",
+           legend.margin = margin(t = 10, unit='pt'),
+           plot.margin=unit(c(10,5,5,5),"mm"),
+           strip.background=element_rect(colour="#d8d8d8",fill="#d8d8d8")
+   ))
+}
+```
+
+```{r}
+
+# UPSET by diagnosis condition #
+
+
+deg_threshold<-0.001
+fc_threshold<-0.25
+pdf(glue("/projects/p31535/zzhang/als/output/upset/fc.{fc_threshold}_BH.{deg_threshold}_upset_by_diagnosis.pdf"),width = 12, height = 9)
+
+
+cell_types<-find_all_cell_types(degs_path)
+
+for(cur_cell_type in cell_types){
+  cur_files<-degs_path[grepl(cur_cell_type,degs_path)]
+  
+  gene_sets<-list()
+  for(cur_file in cur_files){
+    # print(cur_file)
+    x<-tail(unlist(strsplit(cur_file,"/")),n=1)%>%
+      strsplit("_vs._")%>%
+      unlist()
+    group1<-unlist(strsplit(x[1],"__"))[2]
+    group2<-unlist(strsplit(x[2],"__"))[2]|>str_remove(".csv")
+    cur_gene_set_name<-paste(group1,group2,sep = " vs. ")
+    df<-read.csv(cur_file)
+    df<-df[df["BH"]<deg_threshold,]
+    df<-df[df["avg_log2FC"]>fc_threshold | df["avg_log2FC"]< (-1)*fc_threshold,]
+    
+    # no deg
+    if(length(df)!=0){
+      gene_sets[[cur_gene_set_name]]<-df[["X"]]
+    }
+    
+  }
+  # if only one group has data, then skip plotting
+  non_zero_count<-lapply(gene_sets,function(x){length(x)>1})%>%
+    unlist()%>%
+    sum()
+  if(non_zero_count>1){
+
+    upset_plt<-upset(fromList(gene_sets),order.by = "freq")
+    print(upset_plt)
+    grid.text(cur_cell_type,x = 0.65, y=0.95, gp=gpar(fontsize=20))
+  }
+
+}
+dev.off()
+# ggsave("/projects/p31535/zzhang/als/output/upset/upset_by_diagnosis.pdf",
+#        plot=plots,
+#        device = "pdf",
+#        width = 16,
+#        height = 9,
+#        dpi=300)
+```
+```{r}
+deg_threshold<-0.001
+fc_threshold<-0.25
+pdf(glue("/projects/p31535/zzhang/als/output/upset/combined_fc.{fc_threshold}_BH.{deg_threshold}_upset_by_diagnosis.pdf"),width = 12, height = 9)
+
+
+cell_types<-find_all_cell_types(degs_path)
+gene_sets<-list()
+
+for(cur_cell_type in cell_types){
+  cur_files<-degs_path[grepl(cur_cell_type,degs_path)]
+  
+  for(cur_file in cur_files){
+    # print(cur_file)
+    x<-tail(unlist(strsplit(cur_file,"/")),n=1)%>%
+      strsplit("_vs._")%>%
+      unlist()
+    group1<-unlist(strsplit(x[1],"__"))[2]
+    group2<-unlist(strsplit(x[2],"__"))[2]|>str_remove(".csv")
+    cur_gene_set_name<-paste(group1,group2,sep = " vs. ")
+    if(!cur_gene_set_name %in% names(gene_sets)){
+      gene_sets[[cur_gene_set_name]]<-c()
+    }
+    df<-read.csv(cur_file)
+    df<-df[df["BH"]<deg_threshold,]
+    df<-df[df["avg_log2FC"]>fc_threshold | df["avg_log2FC"]< (-1)*fc_threshold,]
+    # no deg
+    if(nrow(df)!=0){
+      df[["gene-cell_type"]]<-paste(df$X,cur_cell_type, sep="_")
+      gene_sets[[cur_gene_set_name]]<-c(gene_sets[[cur_gene_set_name]], df[["gene-cell_type"]])
+
+    }
+    
+    
+  }
+}
+upset_plt<-upset(fromList(gene_sets),order.by = "freq")
+print(upset_plt)
+grid.text("Combined Upset",x = 0.65, y=0.95, gp=gpar(fontsize=20))
+dev.off()
+```
+## pie chart for combined Upset plot
+```{r}
+c9<-setdiff(gene_sets$`als_c9orf72 vs. healthy_control`, c(gene_sets$`als_fast vs. als_slow`, gene_sets$`als_fast vs. healthy_control`, gene_sets$`als_slow vs. healthy_control`, gene_sets$`als vs. healthy_control`))
+fast_vs_slow<-setdiff(gene_sets$`als_fast vs. als_slow`,c(gene_sets$`als_c9orf72 vs. healthy_control`, gene_sets$`als_fast vs. healthy_control`, gene_sets$`als_slow vs. healthy_control`, gene_sets$`als vs. healthy_control`))
+slow<-setdiff(gene_sets$`als_slow vs. healthy_control`, c(gene_sets$`als_fast vs. als_slow`, gene_sets$`als_fast vs. healthy_control`, gene_sets$`als_c9orf72 vs. healthy_control`, gene_sets$`als vs. healthy_control`))
+fast<-setdiff(gene_sets$`als_fast vs. healthy_control`, c(gene_sets$`als_fast vs. als_slow`, gene_sets$`als_c9orf72 vs. healthy_control`, gene_sets$`als_slow vs. healthy_control`, gene_sets$`als vs. healthy_control`))
+all<-setdiff(gene_sets$`als vs. healthy_control`, c(gene_sets$`als_fast vs. als_slow`, gene_sets$`als_c9orf72 vs. healthy_control`, gene_sets$`als_slow vs. healthy_control`, gene_sets$`als_fast vs. healthy_control`))
+
+
+data<-list(c9_vs_healthy=c9, fast_vs_slow=fast_vs_slow, slow_vs_healthy=slow, fast_vs_healthy=fast, als_vs_healthy=all)
+
+
+out<-glue("/projects/p31535/zzhang/als/output/upset/combined_piechart_fc.{fc_threshold}_BH.{deg_threshold}_upset_by_diagnosis.pdf")
+
+pdf(out)
+for(cur_data_name in names(data)){
+  cur_data<-data[[cur_data_name]]
+  cur_data_celltype<-sapply(cur_data, function(x){
+    cur_data_list<-strsplit(x,"_")[[1]]
+    cur_celltype<-paste(cur_data_list[2:length(cur_data_list)], collapse = "_")
+    }
+  )
+  celltype_counts<-table(cur_data_celltype)|>as.data.frame()
+  colnames(celltype_counts)<-c("Cell Type", "Count")
+  celltype_counts[["Color"]]<-sapply(celltype_counts$`Cell Type`, function(x){
+    cur_celltype<-str_replace_all(x, "_", " ")
+    celltype2color[[cur_celltype]]
+  })
+  cur_data_name_modified<-str_replace_all(cur_data_name, "_", " ")
+  plt<-ggplot(celltype_counts, aes(x="", y=Count)) +
+    geom_bar(stat="identity", width=1, fill=celltype_counts$Color) +
+    coord_polar("y", start=0)+
+    theme_Publication_blank()+
+    labs(title = str_replace_all(cur_data_name, "_", " "))
+    print(plt)
+  cur_datatable_out<-glue("/projects/p31535/zzhang/als/output/upset/combined_piechart_fc.{fc_threshold}_BH.{deg_threshold}_comparison.{cur_data_name_modified}_upset_by_diagnosis.csv")
+  write.csv(celltype_counts, cur_datatable_out, quote = F, row.names = F)
+}
+dev.off()
+```
+
+
+
+```{r}
+## upset by celltype within one condition ##
+deg_threshold<-0.001
+fc_threshold<-0.25
+set_size_min<-3
+
+# condition<-"als_vs.*healthy_control|healthy_control.*als_vs"
+# condition<-"als_c9orf72_vs.*healthy_control|healthy_control.*als_c9orf72_vs"
+condition<-"als_fast_vs.*als_slow|als_slow.*als_fast_vs"
+
+condition_title<-strsplit(condition,"|",fixed = T)[[1]][1]%>%str_remove("\\*")
+
+pdf(glue("/projects/p31535/zzhang/als/output/upset/{condition_title}_fc.{fc_threshold}_bh_{deg_threshold}_upset_by_cell_type.pdf"),width=15, height = 9, onefile=FALSE)
+
+target_files<-degs_path[grepl(condition,degs_path)]
+gene_sets<-list()
+cell_num_threshold<-0.01 # 1% of total cells
+cells_cutoff<-ceiling(dim(seurat_integrated)[2]*cell_num_threshold)
+
+for(cur_file in target_files){
+  x<-tail(unlist(strsplit(cur_file,"/")),n=1)%>%
+      strsplit("_vs._")%>%
+      unlist()
+  if(!grepl("__", cur_file, fixed = TRUE)){
+    next
+  }
+  cur_cell_type<-unlist(strsplit(x[1],"__"))[1]
+  ## check if meets threshold of cells
+  
+  # if(sum(seurat_integrated$cell_type==str_replace_all(cur_cell_type,"_"," "))<cells_cutoff){
+  #   print(cur_cell_type)
+  #   next
+  # }
+  df<-read.csv(cur_file)
+  df<-df[df["BH"]<deg_threshold,]
+  df<-df[df["avg_log2FC"]>fc_threshold | df["avg_log2FC"]< (-1)*fc_threshold,]
+  
+  # no deg
+  if(length(df)!=0){
+    gene_sets[[cur_cell_type]]<-df[["X"]]
+  }
+
+}
+non_zero_count<-lapply(gene_sets,function(x){length(x)>0})%>%
+  unlist()%>%
+  sum()
+
+gene_sets<-gene_sets[lengths(gene_sets)>set_size_min]
+
+t<-upset(fromList(gene_sets), nsets = length(gene_sets),nintersects=30, order.by = "freq")
+set_names<-t$labels
+new_col<-sapply(set_names,function(x) celltype2color[[str_replace(x,"_"," ")]])
+if(non_zero_count>1){
+  upset_plt<-upset(fromList(gene_sets), nsets = length(gene_sets),nintersects=30, order.by = "freq",sets.bar.color = new_col)
+  print(upset_plt)
+  grid.text(str_replace_all(condition_title,"_"," "),x = 0.65, y=0.95, gp=gpar(fontsize=20))
+}
+
+dev.off()
+# ggplot does not work on this kinda object for some reason, left side of the plot is missing
+# apparentl this is a known issue and no known fixes can be found, convert to png manually
+# ggsave(filename=glue("/projects/p31535/zzhang/als/output/upset/{condition_title}_fc.{fc_threshold}_bh_{deg_threshold}_upset_by_cell_type.png"),
+#        ggplotify::as.ggplot(upset_plt),width=15, height = 9, device = "png")
+       
+
+```
+```{r fig.height=9, fig.width=15}
+print(t1)
+```
+
+
+
+
+
